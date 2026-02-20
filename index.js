@@ -25,6 +25,22 @@ async function run() {
     const database = client.db("fundStackDB");
     const loansCollection = database.collection("loans");
 
+    // featured loan get api 
+    app.get("/featured-loans", async (req, res) => {
+      const cursor = loansCollection
+        .find({ showOnHome: true })
+        .project({
+          createdAt: 0,
+          emiPlans: 0,
+          requiredDocuments: 0,
+          createdBy: 0,
+          
+        })
+        .limit(6);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
