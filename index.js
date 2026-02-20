@@ -25,20 +25,44 @@ async function run() {
     const database = client.db("fundStackDB");
     const loansCollection = database.collection("loans");
 
-    // featured loan get api 
+    // featured loan get api
     app.get("/featured-loans", async (req, res) => {
-      const cursor = loansCollection
-        .find({ showOnHome: true })
-        .project({
-          createdAt: 0,
-          emiPlans: 0,
-          requiredDocuments: 0,
-          createdBy: 0,
-          
-        })
-        .limit(6);
-      const result = await cursor.toArray();
-      res.send(result);
+      try {
+        const cursor = loansCollection
+          .find({ showOnHome: true })
+          .project({
+            createdAt: 0,
+            emiPlans: 0,
+            requiredDocuments: 0,
+            createdBy: 0,
+          })
+          .limit(6);
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    // all loans get api route
+    app.get("/all-loans", async (req, res) => {
+      try {
+        const { limit = 0, skip = 0, search } = req.query;
+        const query = {};
+        if (search) {
+          query.title = { $regex: search, $options: "i" };
+        }
+        const cursor = loansCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .limit(Number(limit))
+          .skip(Number(skip));
+        const result = await cursor.toArray();
+        const count = await loansCollection.countDocuments(query);
+        res.send({ result, count });
+      } catch (error) {
+        res.status(500).send({ error: "Internal Server Error" });
+      }
     });
 
     await client.db("admin").command({ ping: 1 });
