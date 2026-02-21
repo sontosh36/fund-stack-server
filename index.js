@@ -1,7 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -47,19 +47,32 @@ async function run() {
     // all loans get api route
     app.get("/all-loans", async (req, res) => {
       try {
-        const { limit = 0, skip = 0, search } = req.query;
-        const query = {};
+        const { limit = 0, skip = 0, search = "" } = req.query;
+        let query = {};
         if (search) {
           query.title = { $regex: search, $options: "i" };
         }
         const cursor = loansCollection
           .find(query)
           .sort({ createdAt: -1 })
+          .project({ emiPlans: 0, createdBy: 0, requiredDocuments: 0 })
           .limit(Number(limit))
           .skip(Number(skip));
         const result = await cursor.toArray();
         const count = await loansCollection.countDocuments(query);
         res.send({ result, count });
+      } catch (error) {
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    //loan details get api route
+    app.get("/loan/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await loansCollection.findOne(query);
+        res.send(result);
       } catch (error) {
         res.status(500).send({ error: "Internal Server Error" });
       }
