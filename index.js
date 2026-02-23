@@ -23,8 +23,44 @@ async function run() {
   try {
     await client.connect();
     const database = client.db("fundStackDB");
+    const usersCollection = database.collection("users");
     const loansCollection = database.collection("loans");
 
+    // user management api
+    app.post("/users", async (req, res) => {
+      try {
+        const { email, name, photoURL } = req.body;
+
+        if (!email) {
+          return res.status(400).send({ message: "Email required" });
+        }
+        // Check if user already exists
+        const existingUser = await usersCollection.findOne({ email });
+        if (existingUser) {
+          return res.send({
+            message: "User already exists",
+            inserted: false,
+          });
+        }
+        // Default role =borrower
+        const newUser = {
+          email,
+          name,
+          photoURL,
+          role: "borrower",
+          status: "active",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        const result = await usersCollection.insertOne(newUser);
+        res.send(result);
+        
+      } catch (error) {
+        console.log(error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
     // featured loan get api
     app.get("/featured-loans", async (req, res) => {
       try {
