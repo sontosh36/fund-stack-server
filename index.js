@@ -129,6 +129,25 @@ async function run() {
       catch(error){
         res.status(500).send({message: 'Internal Server Error'});
       }
+    });
+    //borrower get loan application api
+    app.get('/loanApplication', async(req, res)=>{
+      try{
+        const {email} = req.query;
+        const query = {};
+        if (email) {
+          query.borrowerEmail = email;
+        }
+        console.log(email);
+        console.log('query', query);
+        
+        const cursor = loanApplicationCollection.find(query);
+        const result = await cursor.toArray();
+        res.send(result);
+
+      }catch(error){
+        res.status(500).send({message: 'Internal Server Error'})
+      }
     })
 
     await client.db("admin").command({ ping: 1 });
