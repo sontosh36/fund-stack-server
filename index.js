@@ -25,11 +25,12 @@ async function run() {
     const database = client.db("fundStackDB");
     const usersCollection = database.collection("users");
     const loansCollection = database.collection("loans");
+    const loanApplicationCollection = database.collection('loanApplication');
 
     // user management api
     app.post("/users", async (req, res) => {
       try {
-        const { email, name, photoURL } = req.body;
+        const { email, name, photoURL, role } = req.body;
 
         if (!email) {
           return res.status(400).send({ message: "Email required" });
@@ -47,7 +48,7 @@ async function run() {
           email,
           name,
           photoURL,
-          role: "borrower",
+          role,
           status: "active",
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -113,6 +114,22 @@ async function run() {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
+    // loan application related api
+
+    // borrower post loan application
+    app.post('/loanApplication', async(req, res) =>{
+      try{
+        const loan = req.body;
+        loan.submitedAt = new Date();
+        loan.applicationFeeStatus = 'unpaid';
+        loan.status = 'pending';
+        const result = await loanApplicationCollection.insertOne(loan);
+        res.send(result);
+      }
+      catch(error){
+        res.status(500).send({message: 'Internal Server Error'});
+      }
+    })
 
     await client.db("admin").command({ ping: 1 });
     console.log(
