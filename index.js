@@ -25,7 +25,7 @@ async function run() {
     const database = client.db("fundStackDB");
     const usersCollection = database.collection("users");
     const loansCollection = database.collection("loans");
-    const loanApplicationCollection = database.collection('loanApplication');
+    const loanApplicationCollection = database.collection("loanApplication");
 
     // user management api
     app.post("/users", async (req, res) => {
@@ -56,7 +56,6 @@ async function run() {
 
         const result = await usersCollection.insertOne(newUser);
         res.send(result);
-        
       } catch (error) {
         console.log(error);
         res.status(500).send({ message: "Internal Server Error" });
@@ -117,38 +116,45 @@ async function run() {
     // loan application related api
 
     // borrower post loan application
-    app.post('/loanApplication', async(req, res) =>{
-      try{
+    app.post("/loanApplication", async (req, res) => {
+      try {
         const loan = req.body;
         loan.submitedAt = new Date();
-        loan.applicationFeeStatus = 'unpaid';
-        loan.status = 'pending';
+        loan.applicationFeeStatus = "unpaid";
+        loan.status = "pending";
         const result = await loanApplicationCollection.insertOne(loan);
         res.send(result);
-      }
-      catch(error){
-        res.status(500).send({message: 'Internal Server Error'});
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
       }
     });
     //borrower get loan application api
-    app.get('/loanApplication', async(req, res)=>{
-      try{
-        const {email} = req.query;
+    app.get("/loanApplication", async (req, res) => {
+      try {
+        const { email } = req.query;
         const query = {};
         if (email) {
           query.borrowerEmail = email;
         }
-        console.log(email);
-        console.log('query', query);
-        
+
         const cursor = loanApplicationCollection.find(query);
         const result = await cursor.toArray();
         res.send(result);
-
-      }catch(error){
-        res.status(500).send({message: 'Internal Server Error'})
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
       }
-    })
+    });
+    // borrower loan application delete api
+    app.delete("/loanApplication/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await loanApplicationCollection.deleteOne(query);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
