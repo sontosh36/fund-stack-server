@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
+const stripe = require("stripe")(process.env.STRIPE_SECRET);
 const port = process.env.PORT || 3000;
 
 //middleware
@@ -152,6 +153,37 @@ async function run() {
         const result = await loanApplicationCollection.deleteOne(query);
         res.send(result);
       } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+    // payment related api
+    app.post("/create-checkout-session", async (req, res) => {
+      try {
+        const paymentInfo = req.body;
+        const session = await stripe.checkout.sessions.create({
+          line_items: [
+            {
+              price_data: {
+                currency: "usd",
+                unit_amount: 1000,
+                product_data: {
+                  name: `Please pay for: ${paymentInfo.loanTitle}`,
+                },
+              },
+              quantity: 1,
+            },
+          ],
+          mode: "payment",
+          customer_email: paymentInfo.borrowerEmail,
+          metadata: {
+            application_id: paymentInfo.application_id,
+          },
+          success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+        });
+        res.send({ url: session.url });
+      } catch (err) {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
