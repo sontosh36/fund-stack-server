@@ -177,13 +177,37 @@ async function run() {
           mode: "payment",
           customer_email: paymentInfo.borrowerEmail,
           metadata: {
-            application_id: paymentInfo.application_id,
+            application_id: paymentInfo.application_Id,
           },
           success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
         });
         res.send({ url: session.url });
       } catch (err) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // payment success api
+    app.patch("/payment-success", async (req, res) => {
+      try {
+        const sessionId = req.query.session_id;
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+        if (session.payment_status === "paid") {
+          const id = session.metadata.application_id;
+          const query = { _id: new ObjectId(id) };
+          const update = {
+            $set: {
+              applicationFeeStatus: "paid",
+            },
+          };
+          const result = await loanApplicationCollection.updateOne(
+            query,
+            update,
+          );
+          res.send(result);
+        }
+      } catch (error) {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
