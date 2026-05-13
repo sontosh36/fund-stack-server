@@ -5,10 +5,30 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 const port = process.env.PORT || 3000;
+var admin = require("firebase-admin");
+var serviceAccount = require("./fund-stack-firebase-adminsdk.json");
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 //middleware
 app.use(cors());
 app.use(express.json());
+
+const verifyFBToken = async (req, res, next) => {
+  const token = req.headers?.authorization;
+  if (!token) {
+    return res.send({ message: "Unauthorized access" });
+  }
+  try {
+    const idToken = req.headers.authorization.split(" ")[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.decoded_email = decoded.email;
+  } catch (err) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+  next();
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.l1sfp1m.mongodb.net/?appName=Cluster0`;
 
@@ -27,6 +47,7 @@ async function run() {
     const usersCollection = database.collection("users");
     const loansCollection = database.collection("loans");
     const loanApplicationCollection = database.collection("loanApplication");
+    const paymentCollection = database.collection("payments");
 
     // user management api
     app.post("/users", async (req, res) => {
@@ -117,7 +138,7 @@ async function run() {
     // loan application related api
 
     // borrower post loan application
-    app.post("/loanApplication", async (req, res) => {
+    app.post("/loanApplication", verifyFBToken, async (req, res) => {
       try {
         const loan = req.body;
         loan.submitedAt = new Date();
@@ -130,14 +151,16 @@ async function run() {
       }
     });
     //borrower get loan application api
-    app.get("/loanApplication", async (req, res) => {
+    app.get("/loanApplication", verifyFBToken, async (req, res) => {
       try {
         const { email } = req.query;
         const query = {};
         if (email) {
           query.borrowerEmail = email;
+          if (email !== req.decoded_email) {
+            return res.status(403).send({ message: "forbidden access" });
+          }
         }
-
         const cursor = loanApplicationCollection.find(query);
         const result = await cursor.toArray();
         res.send(result);
@@ -146,7 +169,7 @@ async function run() {
       }
     });
     // borrower loan application delete api
-    app.delete("/loanApplication/:id", async (req, res) => {
+    app.delete("/loanApplication/:id", verifyFBToken, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -178,6 +201,7 @@ async function run() {
           customer_email: paymentInfo.borrowerEmail,
           metadata: {
             application_id: paymentInfo.application_Id,
+            loanTitle: paymentInfo.loanTitle,
           },
           success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
@@ -193,20 +217,56 @@ async function run() {
         const sessionId = req.query.session_id;
         const session = await stripe.checkout.sessions.retrieve(sessionId);
 
+        const transactionId = session.payment_intent;
+        const query = {
+          transactionId: transactionId,
+        };
+        const alreadyPayment = await paymentCollection.findOne(query);
+        if (alreadyPayment) {
+          return res.send({ success: "false", message: "already Payment" });
+        }
+
         if (session.payment_status === "paid") {
           const id = session.metadata.application_id;
           const query = { _id: new ObjectId(id) };
           const update = {
             $set: {
               applicationFeeStatus: "paid",
+              transactionId: transactionId,
             },
           };
           const result = await loanApplicationCollection.updateOne(
             query,
             update,
           );
-          res.send(result);
+          const paymentData = {
+            applicationId: session.metadata.application_id,
+            transactionId: session.payment_intent,
+            loanTitle: session.metadata.loanTitle,
+            borrowerEmail: session.customer_email,
+            paymentStatus: session.payment_status,
+            paidAt: new Date(),
+          };
+          const resultPayment = await paymentCollection.insertOne(paymentData);
+          res.send({
+            success: true,
+            modifyApplication: result,
+            paymentInfo: resultPayment,
+          });
         }
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // payment detalis api
+    app.get("/payment-details/:loanId", async (req, res) => {
+      try {
+        const loanId = req.params.loanId;
+        const query = {
+          applicationId: loanId,
+        };
+        const result = await paymentCollection.findOne(query);
+        res.send(result);
       } catch (error) {
         res.status(500).send({ message: "Internal Server Error" });
       }
