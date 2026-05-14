@@ -5,8 +5,8 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 const port = process.env.PORT || 3000;
-var admin = require("firebase-admin");
-var serviceAccount = require("./fund-stack-firebase-adminsdk.json");
+const admin = require("firebase-admin");
+const serviceAccount = require("./fund-stack-firebase-adminsdk.json");
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -24,8 +24,21 @@ const verifyFBToken = async (req, res, next) => {
     const idToken = req.headers.authorization.split(" ")[1];
     const decoded = await admin.auth().verifyIdToken(idToken);
     req.decoded_email = decoded.email;
+    // DB => user
+    const user = await usersCollection.findOne({ decoded_email });
+    if (!user) {
+      return res.status(404).send({ message: "User not found" });
+    }
+    // full user data
+    req.user = user;
+    next();
   } catch (err) {
     return res.status(401).send({ message: "Unauthorized access" });
+  }
+};
+const verifyAdmin = (req, res, next) => {
+  if (req.user.role !== "admin") {
+    return res.status(403).send({ message: "Forbidden. Admin only access" });
   }
   next();
 };
@@ -52,7 +65,7 @@ async function run() {
     // user management api
     app.post("/users", async (req, res) => {
       try {
-        const { email, name, photoURL, role } = req.body;
+        const { email, name, photoURL } = req.body;
 
         if (!email) {
           return res.status(400).send({ message: "Email required" });
@@ -70,10 +83,8 @@ async function run() {
           email,
           name,
           photoURL,
-          role,
-          status: "active",
+          role: "borrower",
           createdAt: new Date(),
-          updatedAt: new Date(),
         };
 
         const result = await usersCollection.insertOne(newUser);
@@ -123,7 +134,6 @@ async function run() {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
-
     //loan details get api route
     app.get("/loan/:id", async (req, res) => {
       try {
@@ -266,6 +276,91 @@ async function run() {
           applicationId: loanId,
         };
         const result = await paymentCollection.findOne(query);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // admin related api
+    app.get("/users/borrowers", async (req, res) => {
+      try {
+        const cursor = usersCollection.find({ role: "borrower" });
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // get all loan api
+    app.get("/all-loans/admin", async (req, res) => {
+      try {
+        const result = await loansCollection.find().toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // all loan delete api by admin
+    app.delete("/allLoans/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await loansCollection.deleteOne(query);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // all loan patch api
+    app.patch("/allLoan/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = {_id: new ObjectId(id)};
+        const updateDoc = req.body;
+        const update = {
+          $set: {
+            title: updateDoc.title,
+            image: updateDoc.image,
+            category: updateDoc.category,
+            maxLoanLimit: updateDoc.maxLoanLimit,
+            interestRate: updateDoc.interestRate,
+          }
+        }
+        const result = await loansCollection.updateOne(query, update);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    app.patch('/show-on-home/loan/:id', async(req, res) =>{
+      try{
+        const id = req.params.id;
+        const query = {_id: new ObjectId(id)}
+        const {showOnHome}= req.body;
+        const updateToggle ={
+          $set: {
+            showOnHome
+          }
+        }
+        const result = await loansCollection.updateOne(query, updateToggle);
+        res.send(result);
+      }
+      catch(error){
+        res.status(500).send({message: "Internal Server Error"})
+      }
+    })
+    // user role modified api
+    app.patch("/users/role/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { role } = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updateRole = {
+          $set: {
+            role,
+          },
+        };
+        const result = await usersCollection.updateOne(query, updateRole);
         res.send(result);
       } catch (error) {
         res.status(500).send({ message: "Internal Server Error" });
