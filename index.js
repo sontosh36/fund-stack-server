@@ -24,25 +24,11 @@ const verifyFBToken = async (req, res, next) => {
     const idToken = req.headers.authorization.split(" ")[1];
     const decoded = await admin.auth().verifyIdToken(idToken);
     req.decoded_email = decoded.email;
-    // DB => user
-    const user = await usersCollection.findOne({ decoded_email });
-    if (!user) {
-      return res.status(404).send({ message: "User not found" });
-    }
-    // full user data
-    req.user = user;
     next();
   } catch (err) {
     return res.status(401).send({ message: "Unauthorized access" });
   }
 };
-const verifyAdmin = (req, res, next) => {
-  if (req.user.role !== "admin") {
-    return res.status(403).send({ message: "Forbidden. Admin only access" });
-  }
-  next();
-};
-
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.l1sfp1m.mongodb.net/?appName=Cluster0`;
 
 const client = new MongoClient(uri, {
@@ -163,7 +149,7 @@ async function run() {
     //borrower get loan application api
     app.get("/loanApplication", verifyFBToken, async (req, res) => {
       try {
-        const { email } = req.query;
+        const email = req.query.email;
         const query = {};
         if (email) {
           query.borrowerEmail = email;
@@ -282,6 +268,7 @@ async function run() {
       }
     });
     // admin related api
+
     app.get("/users/borrowers", async (req, res) => {
       try {
         const cursor = usersCollection.find({ role: "borrower" });
@@ -315,7 +302,7 @@ async function run() {
     app.patch("/allLoan/:id", async (req, res) => {
       try {
         const id = req.params.id;
-        const query = {_id: new ObjectId(id)};
+        const query = { _id: new ObjectId(id) };
         const updateDoc = req.body;
         const update = {
           $set: {
@@ -324,43 +311,48 @@ async function run() {
             category: updateDoc.category,
             maxLoanLimit: updateDoc.maxLoanLimit,
             interestRate: updateDoc.interestRate,
-          }
-        }
+          },
+        };
         const result = await loansCollection.updateOne(query, update);
         res.send(result);
       } catch (error) {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
-    app.patch('/show-on-home/loan/:id', async(req, res) =>{
-      try{
-        const id = req.params.id;
-        const query = {_id: new ObjectId(id)}
-        const {showOnHome}= req.body;
-        const updateToggle ={
-          $set: {
-            showOnHome
-          }
-        }
-        const result = await loansCollection.updateOne(query, updateToggle);
-        res.send(result);
-      }
-      catch(error){
-        res.status(500).send({message: "Internal Server Error"})
-      }
-    })
-    // user role modified api
-    app.patch("/users/role/:id", async (req, res) => {
+    app.patch("/show-on-home/loan/:id", async (req, res) => {
       try {
         const id = req.params.id;
-        const { role } = req.body;
         const query = { _id: new ObjectId(id) };
-        const updateRole = {
+        const { showOnHome } = req.body;
+        const updateToggle = {
           $set: {
-            role,
+            showOnHome,
           },
         };
-        const result = await usersCollection.updateOne(query, updateRole);
+        const result = await loansCollection.updateOne(query, updateToggle);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+    // all application see  get api
+    app.get("/all-loan-application", async (req, res) => {
+      try {
+        const result = await loanApplicationCollection.find().toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+    // manager related api
+
+    app.post("/add-loan", async (req, res) => {
+      try {
+        const data = req.body;
+        data.createdAt = new Date();
+        const result = await loansCollection.insertOne(data);
         res.send(result);
       } catch (error) {
         res.status(500).send({ message: "Internal Server Error" });
