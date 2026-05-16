@@ -347,7 +347,7 @@ async function run() {
     });
 
     // manager related api
-
+    // add loan
     app.post("/add-loan", async (req, res) => {
       try {
         const data = req.body;
@@ -358,7 +358,111 @@ async function run() {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
-
+    // manage loan get api
+    app.get("/all-loan/:email/manageLoan", async (req, res) => {
+      try {
+        const email = req.params.email;
+        console.log("email", email);
+        const query = {};
+        if (email) {
+          query.email = email;
+        }
+        const cursor = loansCollection.find(query);
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // loan update api
+    app.patch("/manage-loan/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = req.body;
+        const update = {
+          $set: {
+            title: updateDoc.title,
+            image: updateDoc.image,
+            interestRate: updateDoc.interestRate,
+            category: updateDoc.category,
+            maxLoanLimit: updateDoc.maxLoanLimit,
+            description: updateDoc.description,
+          },
+        };
+        const result = await loansCollection.updateOne(query, update);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // load delete
+    app.delete("/manageLoan/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await loansCollection.deleteOne(query);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // get all pending Loan status
+    app.get("/looking-pending-application", async (req, res) => {
+      try {
+        const result = await loanApplicationCollection
+          .find({ status: "pending" })
+          .toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // application status update(pending->approved) api
+    app.patch("/pending-application/approved/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const updateStatus = {
+          $set: {
+            status: "approved",
+            approvedAt: new Date(),
+          },
+        };
+        const result = await loanApplicationCollection.updateOne(
+          query,
+          updateStatus,
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    // application status update(pending->rejected) api
+    app.patch('/pending-application/rejected/:id', async(req, res)=>{
+     try{
+       const id = req.params.id;
+      const query ={_id: new ObjectId(id)}
+      const updateInfo = {
+        $set:{
+          status: 'rejected'
+        }
+      }
+      const result = await loanApplicationCollection.updateOne(query, updateInfo);
+      res.send(result);
+     }catch(error){
+      res.status(500).send({message: 'Internal Server Error'})
+     }
+    })
+    // approved loan application get
+    app.get('/approved-loan', async(req, res)=>{
+      try{
+        const result = await loanApplicationCollection.find({status: 'approved'}).toArray();
+        res.send(result);
+      }catch(error){
+        res.status(500).send({message: 'Internal Server Error'})
+      }
+    })
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
