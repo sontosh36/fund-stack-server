@@ -6,7 +6,8 @@ const app = express();
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 const port = process.env.PORT || 3000;
 const admin = require("firebase-admin");
-const serviceAccount = require("./fund-stack-firebase-adminsdk.json");
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8');
+const serviceAccount = JSON.parse(decoded);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -96,7 +97,6 @@ async function run() {
         const result = await usersCollection.insertOne(newUser);
         res.send(result);
       } catch (error) {
-        console.log(error);
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
@@ -521,10 +521,8 @@ async function run() {
         res.status(500).send({message: "Internal Server Error"})
       }
     })
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!",
-    );
+    //await client.db("admin").command({ ping: 1 });
+    //console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // don't write
   }
