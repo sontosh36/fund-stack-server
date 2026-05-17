@@ -48,11 +48,21 @@ async function run() {
     const loanApplicationCollection = database.collection("loanApplication");
     const paymentCollection = database.collection("payments");
 
+    // middleware more with database access
+    const verifyAdmin = async(req, res, next)=>{
+      const email = req.decoded_email;
+      const query ={email}
+      const user = await usersCollection.findOne(query);
+      if (!user || user.role !== 'admin' || user.role !== 'manager') {
+        return res.status(403).send({message: 'forbidden access'})
+      }
+      next();
+      
+    }
     // user management api
     app.post("/users", async (req, res) => {
       try {
         const { email, name, photoURL } = req.body;
-
         if (!email) {
           return res.status(400).send({ message: "Email required" });
         }
@@ -77,6 +87,16 @@ async function run() {
         res.send(result);
       } catch (error) {
         console.log(error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+    app.get("/users/:email/role", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const query = { email };
+        const user = await usersCollection.findOne(query);
+        res.send({ role: user.role || "user" });
+      } catch (error) {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
@@ -362,7 +382,6 @@ async function run() {
     app.get("/all-loan/:email/manageLoan", async (req, res) => {
       try {
         const email = req.params.email;
-        console.log("email", email);
         const query = {};
         if (email) {
           query.email = email;
@@ -397,7 +416,7 @@ async function run() {
       }
     });
     // load delete
-    app.delete("/manageLoan/:id", async (req, res) => {
+    app.delete("/manageLoan/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -419,7 +438,7 @@ async function run() {
       }
     });
     // application status update(pending->approved) api
-    app.patch("/pending-application/approved/:id", async (req, res) => {
+    app.patch("/pending-application/approved/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -439,30 +458,35 @@ async function run() {
       }
     });
     // application status update(pending->rejected) api
-    app.patch('/pending-application/rejected/:id', async(req, res)=>{
-     try{
-       const id = req.params.id;
-      const query ={_id: new ObjectId(id)}
-      const updateInfo = {
-        $set:{
-          status: 'rejected'
-        }
-      }
-      const result = await loanApplicationCollection.updateOne(query, updateInfo);
-      res.send(result);
-     }catch(error){
-      res.status(500).send({message: 'Internal Server Error'})
-     }
-    })
-    // approved loan application get
-    app.get('/approved-loan', async(req, res)=>{
-      try{
-        const result = await loanApplicationCollection.find({status: 'approved'}).toArray();
+    app.patch("/pending-application/rejected/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const updateInfo = {
+          $set: {
+            status: "rejected",
+          },
+        };
+        const result = await loanApplicationCollection.updateOne(
+          query,
+          updateInfo,
+        );
         res.send(result);
-      }catch(error){
-        res.status(500).send({message: 'Internal Server Error'})
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
       }
-    })
+    });
+    // approved loan application get
+    app.get("/approved-loan", async (req, res) => {
+      try {
+        const result = await loanApplicationCollection
+          .find({ status: "approved" })
+          .toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
