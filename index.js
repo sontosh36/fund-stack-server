@@ -53,7 +53,17 @@ async function run() {
       const email = req.decoded_email;
       const query ={email}
       const user = await usersCollection.findOne(query);
-      if (!user || user.role !== 'admin' || user.role !== 'manager') {
+      if (!user || user.role !== 'admin') {
+        return res.status(403).send({message: 'forbidden access'})
+      }
+      next();
+      
+    }
+    const verifyManager = async(req, res, next)=>{
+      const email = req.decoded_email;
+      const query ={email}
+      const user = await usersCollection.findOne(query);
+      if (!user || user.role !== 'manager') {
         return res.status(403).send({message: 'forbidden access'})
       }
       next();
@@ -141,7 +151,7 @@ async function run() {
       }
     });
     //loan details get api route
-    app.get("/loan/:id", async (req, res) => {
+    app.get("/loan/:id", verifyFBToken, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -287,6 +297,18 @@ async function run() {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
+    // borrower dashboard api
+    app.get('/pending-application/borrower',verifyFBToken, async(req, res)=>{
+      try{
+        const result = await loanApplicationCollection.find({status: 'pending'}).toArray();
+        if (!result) {
+         return res.status(404).send({message: 'data not found'})
+        }
+        res.send(result);
+      }catch(error){
+        res.status(500).send({message: "Internal Server Error"})
+      }
+    })
     // admin related api
 
     app.get("/users/borrowers", async (req, res) => {
@@ -308,7 +330,7 @@ async function run() {
       }
     });
     // all loan delete api by admin
-    app.delete("/allLoans/:id", async (req, res) => {
+    app.delete("/allLoans/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -319,7 +341,7 @@ async function run() {
       }
     });
     // all loan patch api
-    app.patch("/allLoan/:id", async (req, res) => {
+    app.patch("/allLoan/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -368,7 +390,7 @@ async function run() {
 
     // manager related api
     // add loan
-    app.post("/add-loan", async (req, res) => {
+    app.post("/add-loan", verifyFBToken, verifyManager, async (req, res) => {
       try {
         const data = req.body;
         data.createdAt = new Date();
@@ -379,7 +401,7 @@ async function run() {
       }
     });
     // manage loan get api
-    app.get("/all-loan/:email/manageLoan", async (req, res) => {
+    app.get("/all-loan/:email/manageLoan", verifyFBToken, async (req, res) => {
       try {
         const email = req.params.email;
         const query = {};
@@ -394,7 +416,7 @@ async function run() {
       }
     });
     // loan update api
-    app.patch("/manage-loan/:id", async (req, res) => {
+    app.patch("/manage-loan/:id", verifyFBToken, verifyManager, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -416,7 +438,7 @@ async function run() {
       }
     });
     // load delete
-    app.delete("/manageLoan/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+    app.delete("/manageLoan/:id", verifyFBToken, verifyManager, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -427,7 +449,7 @@ async function run() {
       }
     });
     // get all pending Loan status
-    app.get("/looking-pending-application", async (req, res) => {
+    app.get("/looking-pending-application", verifyFBToken, verifyManager, async (req, res) => {
       try {
         const result = await loanApplicationCollection
           .find({ status: "pending" })
@@ -438,7 +460,7 @@ async function run() {
       }
     });
     // application status update(pending->approved) api
-    app.patch("/pending-application/approved/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+    app.patch("/pending-application/approved/:id", verifyFBToken, verifyManager, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -458,7 +480,7 @@ async function run() {
       }
     });
     // application status update(pending->rejected) api
-    app.patch("/pending-application/rejected/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+    app.patch("/pending-application/rejected/:id", verifyFBToken, verifyManager, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -487,6 +509,18 @@ async function run() {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
+    // dashboard manager rejected application loan get
+    app.get('/rejected-application', async(req, res) =>{
+      try{
+        const result = await loanApplicationCollection.find({status: 'rejected'}).toArray();
+        if (!result) {
+          return res.status(404).send({message: '404 not found'})
+        }
+        res.send(result);
+      }catch(error){
+        res.status(500).send({message: "Internal Server Error"})
+      }
+    })
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
