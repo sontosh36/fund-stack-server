@@ -19,7 +19,7 @@ app.use(express.json());
 const verifyFBToken = async (req, res, next) => {
   const token = req.headers?.authorization;
   if (!token) {
-    return res.send({ message: "Unauthorized access" });
+    return res.status(401).send({ message: "Unauthorized access" });
   }
   try {
     const idToken = req.headers.authorization.split(" ")[1];
@@ -42,7 +42,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    //await client.connect();
     const database = client.db("fundStackDB");
     const usersCollection = database.collection("users");
     const loansCollection = database.collection("loans");
